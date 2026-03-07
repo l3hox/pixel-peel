@@ -1,5 +1,7 @@
 # PixelPeel
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A single-file browser tool for removing solid-color backgrounds from images, with specialized support for LLM-generated pixel art.
 
 **Everything lives in one `index.html` file.** Just open it in any modern browser — no build step, no server, no `npm install`. Works offline once CDN scripts are cached.
@@ -47,4 +49,4 @@ PNG export always uses the downscaled canvas (no upscaling); preview optionally 
 
 ## License
 
-Licensed under the [European Union Public Licence v1.2](LICENSE) (EUPL-1.2).
+Licensed under the [MIT License](LICENSE).
