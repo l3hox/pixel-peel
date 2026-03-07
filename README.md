@@ -21,6 +21,9 @@ Designed for LLM-generated pixel art where each "art pixel" is rendered as an Nx
 ### Cartoon Outline
 Adds a 1px black border around the visible subject edges. Applied after downscale, so the outline is one true art pixel wide.
 
+### Autocrop
+Trims transparent edges to the tight bounding box of all visible pixels. Applied as the last processing step, so it respects outline and downscale results.
+
 ### Export
 Downloads the processed result as a transparent PNG. When pixel art mode is active, always exports at the downscaled resolution — the preview upscale is for display only and does not affect the exported file.
 
@@ -38,6 +41,7 @@ All inline in a single HTML file — no build system, no `node_modules`:
 3. **Edge feathering + decontamination** — for pixels within the feather band, compute soft alpha as `min(spatialAlpha, colorAlpha)` and recover the true foreground color via alpha unmixing
 4. **Pixel art downscale** — sample from the center of each fractional grid cell (supports non-square, sub-pixel periods)
 5. **Cartoon outline** — scan for visible pixels with at least one transparent 4-neighbor, paint black
+6. **Autocrop** — find bounding box of all pixels with alpha > 0, crop to fit
 
 PNG export always uses the downscaled canvas (no upscaling); preview optionally re-upscales with nearest-neighbor interpolation for display only.
 

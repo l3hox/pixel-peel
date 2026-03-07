@@ -226,6 +226,7 @@
       const [feather, setFeather] = useState(5);
       const [picking, setPicking] = useState(false);
       const [outline, setOutline] = useState(true);
+      const [autocrop, setAutocrop] = useState(false);
       const [pixelArt, setPixelArt] = useState(true);
       const [gridInfo, setGridInfo] = useState(null); // { scaleX, scaleY, offsetX, offsetY, confidence }
       const [manualScaleX, setManualScaleX] = useState('');
@@ -482,6 +483,36 @@
           }
         }
 
+        // Pass 6: optional autocrop — trim transparent edges to tight bounding box
+        if (autocrop) {
+          const fa = workData.data;
+          let minX = workW, minY = workH, maxX = -1, maxY = -1;
+          for (let y = 0; y < workH; y++) {
+            for (let x = 0; x < workW; x++) {
+              if (fa[(y * workW + x) * 4 + 3] > 0) {
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+              }
+            }
+          }
+          if (maxX >= minX && maxY >= minY) {
+            const cropW = maxX - minX + 1;
+            const cropH = maxY - minY + 1;
+            const cropped = ctx.createImageData(cropW, cropH);
+            const cd = cropped.data;
+            for (let y = 0; y < cropH; y++) {
+              const srcOff = ((minY + y) * workW + minX) * 4;
+              const dstOff = y * cropW * 4;
+              cd.set(fa.subarray(srcOff, srcOff + cropW * 4), dstOff);
+            }
+            workData = cropped;
+            workW = cropW;
+            workH = cropH;
+          }
+        }
+
         // Write to export canvas (downscaled resolution when pixel art is active)
         const exportCanvas = exportCanvasRef.current;
         exportCanvas.width = workW;
@@ -502,7 +533,7 @@
         }
 
         setProcessed(true);
-      }, [targetColor, tolerance, feather, pixelArt, effectiveGrid, previewUpscale, outline, sourceImage]);
+      }, [targetColor, tolerance, feather, pixelArt, effectiveGrid, previewUpscale, outline, autocrop, sourceImage]);
 
       const handlePickColor = () => {
         setPicking(true);
@@ -542,6 +573,7 @@
         setTolerance(30);
         setFeather(5);
         setOutline(false);
+        setAutocrop(false);
         setPixelArt(false);
         setGridInfo(null);
         setManualScaleX('');
@@ -751,6 +783,22 @@
                 )}
               </div>
               <span className="text-sm text-white" onClick={() => setOutline(!outline)}>Cartoon outline</span>
+            </label>
+
+            {/* Autocrop */}
+            <label className="flex items-center gap-3 cursor-pointer select-none">
+              <div
+                className="w-5 h-5 rounded border-2 flex items-center justify-center transition-colors"
+                style={{ borderColor: autocrop ? '#3b82f6' : '#334155', backgroundColor: autocrop ? '#3b82f6' : 'transparent' }}
+                onClick={() => setAutocrop(!autocrop)}
+              >
+                {autocrop && (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                )}
+              </div>
+              <span className="text-sm text-white" onClick={() => setAutocrop(!autocrop)}>Autocrop</span>
             </label>
 
             {/* Spacer */}
