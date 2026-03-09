@@ -222,19 +222,22 @@
     function App() {
       const [sourceImage, setSourceImage] = useState(null);
       const [targetColor, setTargetColor] = useState({ r: 255, g: 255, b: 255 });
-      const [tolerance, setTolerance] = useState(30);
-      const [feather, setFeather] = useState(5);
+      const [tolerance, setTolerance] = useState(11);
+      const [feather, setFeather] = useState(3);
       const [picking, setPicking] = useState(false);
       const [outline, setOutline] = useState(true);
-      const [autocrop, setAutocrop] = useState(false);
+      const [autocrop, setAutocrop] = useState(true);
+      const [squarePad, setSquarePad] = useState(true);
       const [pixelArt, setPixelArt] = useState(true);
       const [gridInfo, setGridInfo] = useState(null); // { scaleX, scaleY, offsetX, offsetY, confidence }
       const [manualScaleX, setManualScaleX] = useState('');
       const [manualScaleY, setManualScaleY] = useState('');
       const [manualOx, setManualOx] = useState('');
       const [manualOy, setManualOy] = useState('');
-      const [previewUpscale, setPreviewUpscale] = useState(true);
       const [processed, setProcessed] = useState(false);
+      const [exportSize, setExportSize] = useState(null); // { w, h }
+      const [exportName, setExportName] = useState('erased-background');
+      const [sourceFileName, setSourceFileName] = useState('');
       const [dragOver, setDragOver] = useState(false);
 
       const hiddenCanvasRef = useRef(null);
@@ -246,6 +249,9 @@
 
       const loadImage = useCallback((file) => {
         if (!file || !file.type.startsWith('image/')) return;
+        const baseName = file.name.replace(/\.[^/.]+$/, '');
+        setSourceFileName(baseName);
+        setExportName(baseName + '-nobg');
         const reader = new FileReader();
         reader.onload = (e) => {
           const img = new Image();
@@ -513,27 +519,39 @@
           }
         }
 
+        // Pass 7: optional square padding — expand shorter side to match longer side
+        if (squarePad && workW !== workH) {
+          const size = Math.max(workW, workH);
+          const offX = Math.floor((size - workW) / 2);
+          const offY = Math.floor((size - workH) / 2);
+          const sq = ctx.createImageData(size, size);
+          const sd = sq.data; // already zeroed (transparent)
+          const fd = workData.data;
+          for (let y = 0; y < workH; y++) {
+            const srcOff = y * workW * 4;
+            const dstOff = ((offY + y) * size + offX) * 4;
+            sd.set(fd.subarray(srcOff, srcOff + workW * 4), dstOff);
+          }
+          workData = sq;
+          workW = size;
+          workH = size;
+        }
+
         // Write to export canvas (downscaled resolution when pixel art is active)
         const exportCanvas = exportCanvasRef.current;
         exportCanvas.width = workW;
         exportCanvas.height = workH;
         const exportCtx = exportCanvas.getContext('2d');
         exportCtx.putImageData(workData, 0, 0);
+        setExportSize({ w: workW, h: workH });
 
-        // Write to preview canvas (scaled up with nearest-neighbor if pixel art + upscale enabled)
-        if (pixelArt && effectiveGrid && workW < w && previewUpscale) {
-          canvas.width = w;
-          canvas.height = h;
-          ctx.imageSmoothingEnabled = false;
-          ctx.drawImage(exportCanvas, 0, 0, w, h);
-        } else {
-          canvas.width = workW;
-          canvas.height = workH;
-          ctx.putImageData(workData, 0, 0);
-        }
+        // Write to preview canvas — always 1:1 with export, CSS handles display scaling
+        canvas.width = workW;
+        canvas.height = workH;
+        ctx.putImageData(workData, 0, 0);
 
         setProcessed(true);
-      }, [targetColor, tolerance, feather, pixelArt, effectiveGrid, previewUpscale, outline, autocrop, sourceImage]);
+      }, [targetColor, tolerance, feather, pixelArt, effectiveGrid, outline, autocrop, squarePad, sourceImage]);
 
       const handlePickColor = () => {
         setPicking(true);
@@ -561,7 +579,7 @@
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = 'erased-background.png';
+          a.download = (exportName || 'erased-background') + '.png';
           a.click();
           URL.revokeObjectURL(url);
         }, 'image/png');
@@ -570,19 +588,22 @@
       const handleClear = () => {
         setSourceImage(null);
         setTargetColor({ r: 255, g: 255, b: 255 });
-        setTolerance(30);
-        setFeather(5);
+        setTolerance(11);
+        setFeather(3);
         setOutline(false);
-        setAutocrop(false);
+        setAutocrop(true);
+        setSquarePad(true);
         setPixelArt(false);
         setGridInfo(null);
         setManualScaleX('');
         setManualScaleY('');
         setManualOx('');
         setManualOy('');
-        setPreviewUpscale(true);
         setPicking(false);
         setProcessed(false);
+        setExportSize(null);
+        setExportName('erased-background');
+        setSourceFileName('');
         sourceDataRef.current = null;
         for (const ref of [previewCanvasRef, exportCanvasRef]) {
           const c = ref.current;
@@ -751,20 +772,6 @@
                         style={{ backgroundColor: '#1e293b', border: '1px solid #334155', outline: 'none' }} />
                     </div>
                   </div>
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <div
-                      className="w-4 h-4 rounded border flex items-center justify-center"
-                      style={{ borderColor: previewUpscale ? '#3b82f6' : '#334155', backgroundColor: previewUpscale ? '#3b82f6' : 'transparent' }}
-                      onClick={() => setPreviewUpscale(!previewUpscale)}
-                    >
-                      {previewUpscale && (
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="20 6 9 17 4 12"/>
-                        </svg>
-                      )}
-                    </div>
-                    <span className="text-xs" style={{ color: '#94a3b8' }} onClick={() => setPreviewUpscale(!previewUpscale)}>Upscale preview</span>
-                  </label>
                 </div>
               )}
             </div>
@@ -801,14 +808,44 @@
               <span className="text-sm text-white" onClick={() => setAutocrop(!autocrop)}>Autocrop</span>
             </label>
 
+            {/* Square pad */}
+            <label className="flex items-center gap-3 cursor-pointer select-none">
+              <div
+                className="w-5 h-5 rounded border-2 flex items-center justify-center transition-colors"
+                style={{ borderColor: squarePad ? '#3b82f6' : '#334155', backgroundColor: squarePad ? '#3b82f6' : 'transparent' }}
+                onClick={() => setSquarePad(!squarePad)}
+              >
+                {squarePad && (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                )}
+              </div>
+              <span className="text-sm text-white" onClick={() => setSquarePad(!squarePad)}>Least fitting square</span>
+            </label>
+
             {/* Spacer */}
             <div className="flex-1" />
 
-            {/* Status */}
-            {processed && (
+            {/* Status + size */}
+            {processed && exportSize && (
               <div className="flex items-center gap-2 text-green-400 text-sm">
                 <CheckCircleIcon />
-                <span>Ready to export</span>
+                <span>Ready to export — {exportSize.w} × {exportSize.h} px</span>
+              </div>
+            )}
+
+            {/* Filename */}
+            {processed && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={exportName}
+                  onChange={(e) => setExportName(e.target.value)}
+                  className="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-blue-400"
+                  placeholder="filename"
+                />
+                <span className="text-sm text-white/50">.png</span>
               </div>
             )}
 
@@ -885,7 +922,7 @@
                 className={`flex-1 rounded-xl flex items-center justify-center overflow-hidden relative ${processed ? 'checkerboard' : ''}`}
                 style={{ backgroundColor: '#0f172a', border: '1px solid #334155' }}
               >
-                <canvas ref={previewCanvasRef} className="max-w-full max-h-full object-contain" style={{ imageRendering: pixelArt ? 'pixelated' : 'auto', display: processed ? 'block' : 'none' }} />
+                <canvas ref={previewCanvasRef} className="w-full h-full object-contain" style={{ imageRendering: pixelArt ? 'pixelated' : 'auto', display: processed ? 'block' : 'none' }} />
                 {!processed && (
                   <span className="text-sm" style={{ color: '#475569' }}>
                     {sourceImage ? 'Processing...' : 'Result will appear here'}
