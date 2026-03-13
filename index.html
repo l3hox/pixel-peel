@@ -228,6 +228,8 @@
       const [outline, setOutline] = useState(true);
       const [autocrop, setAutocrop] = useState(true);
       const [squarePad, setSquarePad] = useState(true);
+      const [overrideW, setOverrideW] = useState('');
+      const [overrideH, setOverrideH] = useState('');
       const [pixelArt, setPixelArt] = useState(true);
       const [gridInfo, setGridInfo] = useState(null); // { scaleX, scaleY, offsetX, offsetY, confidence }
       const [manualScaleX, setManualScaleX] = useState('');
@@ -537,6 +539,27 @@
           workH = size;
         }
 
+        // Pass 8: optional canvas size override — center image on larger transparent canvas
+        const ow = parseInt(overrideW, 10);
+        const oh = parseInt(overrideH, 10);
+        if (ow > 0 && oh > 0 && (ow > workW || oh > workH)) {
+          const finalW = Math.max(ow, workW);
+          const finalH = Math.max(oh, workH);
+          const offX = Math.floor((finalW - workW) / 2);
+          const offY = Math.floor((finalH - workH) / 2);
+          const padded = ctx.createImageData(finalW, finalH);
+          const pd = padded.data;
+          const fd = workData.data;
+          for (let y = 0; y < workH; y++) {
+            const srcOff = y * workW * 4;
+            const dstOff = ((offY + y) * finalW + offX) * 4;
+            pd.set(fd.subarray(srcOff, srcOff + workW * 4), dstOff);
+          }
+          workData = padded;
+          workW = finalW;
+          workH = finalH;
+        }
+
         // Write to export canvas (downscaled resolution when pixel art is active)
         const exportCanvas = exportCanvasRef.current;
         exportCanvas.width = workW;
@@ -551,7 +574,7 @@
         ctx.putImageData(workData, 0, 0);
 
         setProcessed(true);
-      }, [targetColor, tolerance, feather, pixelArt, effectiveGrid, outline, autocrop, squarePad, sourceImage]);
+      }, [targetColor, tolerance, feather, pixelArt, effectiveGrid, outline, autocrop, squarePad, overrideW, overrideH, sourceImage]);
 
       const handlePickColor = () => {
         setPicking(true);
@@ -593,6 +616,8 @@
         setOutline(false);
         setAutocrop(true);
         setSquarePad(true);
+        setOverrideW('');
+        setOverrideH('');
         setPixelArt(false);
         setGridInfo(null);
         setManualScaleX('');
@@ -823,6 +848,29 @@
               </div>
               <span className="text-sm text-white" onClick={() => setSquarePad(!squarePad)}>Least fitting square</span>
             </label>
+
+            {/* Canvas size override */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-slate-400">Canvas:</span>
+              <input
+                type="number"
+                min="1"
+                placeholder="W"
+                value={overrideW}
+                onChange={e => setOverrideW(e.target.value)}
+                className="w-16 px-2 py-1 rounded bg-slate-700 text-white text-sm border border-slate-600 focus:border-blue-500 focus:outline-none"
+              />
+              <span className="text-slate-500 text-sm">×</span>
+              <input
+                type="number"
+                min="1"
+                placeholder="H"
+                value={overrideH}
+                onChange={e => setOverrideH(e.target.value)}
+                className="w-16 px-2 py-1 rounded bg-slate-700 text-white text-sm border border-slate-600 focus:border-blue-500 focus:outline-none"
+              />
+              <span className="text-xs text-slate-500">px</span>
+            </div>
 
             {/* Spacer */}
             <div className="flex-1" />
