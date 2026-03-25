@@ -225,6 +225,8 @@
       const [tolerance, setTolerance] = useState(11);
       const [feather, setFeather] = useState(3);
       const [picking, setPicking] = useState(false);
+      const [downscale, setDownscale] = useState(false);
+      const [downscalePower, setDownscalePower] = useState(1); // 1=2x, 2=4x, 3=8x, 4=16x
       const [outline, setOutline] = useState(true);
       const [autocrop, setAutocrop] = useState(true);
       const [squarePad, setSquarePad] = useState(true);
@@ -462,6 +464,41 @@
           }
         }
 
+        // Pass 4b: optional power-of-2 downscale — average NxN blocks into 1 pixel
+        if (downscale) {
+          const factor = 1 << downscalePower; // 2, 4, 8, or 16
+          const newW = Math.floor(workW / factor);
+          const newH = Math.floor(workH / factor);
+          if (newW > 0 && newH > 0) {
+            const srcPx = workData.data;
+            const ds = ctx.createImageData(newW, newH);
+            const dd = ds.data;
+            const area = factor * factor;
+            for (let dy = 0; dy < newH; dy++) {
+              for (let dx = 0; dx < newW; dx++) {
+                let rSum = 0, gSum = 0, bSum = 0, aSum = 0;
+                for (let sy = 0; sy < factor; sy++) {
+                  for (let sx = 0; sx < factor; sx++) {
+                    const si = ((dy * factor + sy) * workW + (dx * factor + sx)) * 4;
+                    rSum += srcPx[si];
+                    gSum += srcPx[si + 1];
+                    bSum += srcPx[si + 2];
+                    aSum += srcPx[si + 3];
+                  }
+                }
+                const di = (dy * newW + dx) * 4;
+                dd[di]     = Math.round(rSum / area);
+                dd[di + 1] = Math.round(gSum / area);
+                dd[di + 2] = Math.round(bSum / area);
+                dd[di + 3] = Math.round(aSum / area);
+              }
+            }
+            workData = ds;
+            workW = newW;
+            workH = newH;
+          }
+        }
+
         // Pass 5: optional cartoon outline — 1px black border on visible edges
         if (outline) {
           const fa = workData.data;
@@ -574,7 +611,7 @@
         ctx.putImageData(workData, 0, 0);
 
         setProcessed(true);
-      }, [targetColor, tolerance, feather, pixelArt, effectiveGrid, outline, autocrop, squarePad, overrideW, overrideH, sourceImage]);
+      }, [targetColor, tolerance, feather, pixelArt, effectiveGrid, downscale, downscalePower, outline, autocrop, squarePad, overrideW, overrideH, sourceImage]);
 
       const handlePickColor = () => {
         setPicking(true);
@@ -613,6 +650,8 @@
         setTargetColor({ r: 255, g: 255, b: 255 });
         setTolerance(11);
         setFeather(3);
+        setDownscale(false);
+        setDownscalePower(1);
         setOutline(false);
         setAutocrop(true);
         setSquarePad(true);
@@ -797,6 +836,47 @@
                         style={{ backgroundColor: '#1e293b', border: '1px solid #334155', outline: 'none' }} />
                     </div>
                   </div>
+                </div>
+              )}
+            </div>
+
+            {/* Downscale */}
+            <div>
+              <label className="flex items-center gap-3 cursor-pointer select-none">
+                <div
+                  className="w-5 h-5 rounded border-2 flex items-center justify-center transition-colors"
+                  style={{ borderColor: downscale ? '#3b82f6' : '#334155', backgroundColor: downscale ? '#3b82f6' : 'transparent' }}
+                  onClick={() => setDownscale(!downscale)}
+                >
+                  {downscale && (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  )}
+                </div>
+                <span className="text-sm text-white" onClick={() => setDownscale(!downscale)}>Downscale</span>
+              </label>
+              {downscale && (
+                <div className="mt-2 ml-8 flex items-center gap-2">
+                  <span className="text-xs" style={{ color: '#94a3b8' }}>Factor:</span>
+                  {[1, 2, 3, 4].map(p => {
+                    const label = `${1 << p}×`;
+                    const active = downscalePower === p;
+                    return (
+                      <button
+                        key={p}
+                        onClick={() => setDownscalePower(p)}
+                        className="px-2 py-1 rounded text-xs font-mono font-bold transition-colors"
+                        style={{
+                          backgroundColor: active ? '#3b82f6' : '#1e293b',
+                          color: active ? 'white' : '#94a3b8',
+                          border: `1px solid ${active ? '#3b82f6' : '#334155'}`,
+                        }}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
